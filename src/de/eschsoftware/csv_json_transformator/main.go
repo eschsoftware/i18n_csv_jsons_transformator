@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"flag"
 	"github.com/mitchellh/mapstructure"
@@ -91,11 +92,16 @@ func writeJson(filename string, header string, models []I18nData) {
 			jsonData[keyTokens[0]] = model.value[header]
 		}
 	}
-	data, err := json.Marshal(jsonData)
+
+	buffer := &bytes.Buffer{}
+	encoder := json.NewEncoder(buffer)
+	encoder.SetEscapeHTML(false)
+	err := encoder.Encode(jsonData)
+
 	if err != nil {
 		log.Panic(err)
 	}
-	err = ioutil.WriteFile(filename, data, 0644)
+	err = ioutil.WriteFile(filename, buffer.Bytes(), 0644)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -183,7 +189,6 @@ func readJsonFiles(files *[]string, prefix string) (resultMaps []I18nData) {
 		}
 
 		langCode := getLangCodeFromFilename(fullFilename, prefix)
-
 		parsedResult := gjson.ParseBytes(fileContent)
 		parsedResult.ForEach(func(key, value gjson.Result) bool {
 			buildModel(&resultMaps, langCode, key.String(), value)
