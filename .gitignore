@@ -2,3 +2,4 @@
 pkg
 i18n_csv_jsons_transformator.iml
 *.json
+src/github.com/**
