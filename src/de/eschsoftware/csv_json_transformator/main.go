@@ -34,20 +34,25 @@ func init() {
 
 func main() {
 	csvExportFilename := flag.String("csv-export", "i18n.csv", "filename for the CSV to export ")
-	toJson := flag.Bool("toJson", false, "transforms CSV file to different JSON files")
+	fromJson := flag.Bool("fromJson", true, "transforms CSV file to different JSON files")
 	csvImportFilename := flag.String("csv-import", "i18n.csv", "filename of the CSV to import")
 	jsonFilePrefix := flag.String("json-file-prefix", FILE_PREFIX, "")
 	flag.Parse()
 
-	if *toJson {
+	if *fromJson {
 		files := getJsonFiles(wd)
-		model := readJsonFiles(&files, *jsonFilePrefix)
+		models := readJsonFiles(&files, *jsonFilePrefix)
 		headers := make([]string, 1)
 		headers[0] = "key"
 		for _, f := range files {
 			headers = append(headers, getLangCodeFromFilename(f, *jsonFilePrefix))
 		}
-		writeCsv(filepath.Join(wd, *csvExportFilename), headers, model)
+
+		sort.Slice(models, func(i, j int) bool {
+			return models[i].key < models[j].key
+		})
+
+		writeCsv(filepath.Join(wd, *csvExportFilename), headers, models)
 	} else {
 		headers, models := readCsv(csvImportFilename)
 
