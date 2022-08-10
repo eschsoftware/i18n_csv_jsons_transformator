@@ -9,6 +9,8 @@ import (
 	"github.com/tushar2708/altcsv"
 	"io/ioutil"
 	"log"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -34,7 +36,7 @@ func init() {
 
 func main() {
 	csvExportFilename := flag.String("csv-export", "i18n.csv", "filename for the CSV to export ")
-	fromJson := flag.Bool("fromJson", true, "transforms CSV file to different JSON files")
+	fromJson := flag.Bool("fromJson", false, "transforms CSV file to different JSON files")
 	csvImportFilename := flag.String("csv-import", "i18n.csv", "filename of the CSV to import")
 	jsonFilePrefix := flag.String("json-file-prefix", FILE_PREFIX, "")
 	flag.Parse()
@@ -44,9 +46,13 @@ func main() {
 		models := readJsonFiles(&files, *jsonFilePrefix)
 		headers := make([]string, 1)
 		headers[0] = "key"
+		langCodes := make([]string, 0)
 		for _, f := range files {
 			headers = append(headers, getLangCodeFromFilename(f, *jsonFilePrefix))
+			langCodes = append(langCodes, getLangCodeFromFilename(f, *jsonFilePrefix))
 		}
+
+		models = autoTranslate(models, langCodes)
 
 		sort.Slice(models, func(i, j int) bool {
 			return models[i].key < models[j].key
@@ -262,4 +268,71 @@ func writeCsv(exportFile string, headers []string, i18nData []I18nData) {
 		w.Write(line)
 	}
 	w.Flush()
+}
+
+func langCodeDeeplMapper(langCode string) string {
+	if langCode == "de" {
+		return "DE"
+	} else if langCode == "en" {
+		return "EN"
+	} else if langCode == "pl" {
+		return "PL"
+	} else if langCode == "fr" {
+		return "FR"
+	} else if langCode == "tr" {
+		return "TR"
+	} else if langCode == "nl" {
+		return "NL"
+	} else if langCode == "pt" {
+		return "PT"
+	} else if langCode == "es" {
+		return "ES"
+	}
+	return ""
+}
+
+type DeeplTranslation struct {
+	Text string `json:"text"`
+}
+
+type DeeplResponse struct {
+	Translations []DeeplTranslation `json:"translations"`
+}
+
+func autoTranslate(data []I18nData, langCodes []string) []I18nData {
+	log.Println("starting auto translation")
+	for _, i18n := range data {
+		for i, langCode := range langCodes {
+			if langCode == "de" {
+				continue
+			}
+			if _, ok := i18n.value[langCode]; i != 0 && !ok {
+				if _, ok := i18n.value["de"]; !ok {
+					continue
+				}
+				toTranslate := i18n.value["de"]
+				log.Println("try to translate:", toTranslate, langCode)
+				resp, err := http.Get(strings.Join([]string{"https://api-free.deepl.com", "/v2/translate", "?auth_key=bbb8be2f-3e6f-f6d5-2b78-8dc0a4b07e20:fx", "&target_lang=", langCodeDeeplMapper(langCode), "&text=", url.QueryEscape(toTranslate), "&source_lang=DE"}, ""))
+				if err != nil {
+					log.Panic(err)
+				}
+				defer resp.Body.Close()
+
+				body, err := ioutil.ReadAll(resp.Body)
+				if err != nil {
+					log.Panic(err)
+				}
+				jsonData := DeeplResponse{}
+				log.Println(string(body))
+				json.Unmarshal(body, &jsonData)
+				log.Println(jsonData)
+				if len(jsonData.Translations) > 0 {
+					i18n.value[langCode] = jsonData.Translations[0].Text
+				}
+				log.Println(i18n)
+			}
+		}
+	}
+	log.Println("auto translation finished")
+	return data
 }
